@@ -66,16 +66,17 @@
 
         .dot {
             position: absolute;
-            width: 4px;
-            height: 4px;
+            width: 2px;
+            height: 2px;
             border-radius: 50%;
             background: #1a1a1a;
+            transform: translate(-50%, -50%);
             transition: background 0.2s ease;
         }
 
         .dot.filled {
             background: #00ff88;
-            box-shadow: 0 0 4px rgba(0, 255, 136, 0.4);
+            box-shadow: 0 0 3px rgba(0, 255, 136, 0.4);
         }
 
         .subtitle {
@@ -83,10 +84,6 @@
             font-size: 0.875rem;
             margin-top: 0.5rem;
             text-align: center;
-        }
-
-        canvas {
-            display: none;
         }
 
         /* Edit modal */
@@ -205,8 +202,6 @@
     </style>
 </head>
 <body>
-    <canvas id="textCanvas"></canvas>
-
     <div class="header">
         <div class="amount">
             $<span id="current">0</span><span class="goal"> / $1,000,000</span>
@@ -238,14 +233,11 @@
     <script>
         const TOTAL_DOTS = 10000;
         const DOLLAR_PER_DOT = 100;
-        const TEXT = "ROAD TO $1M";
         let filledCount = 0;
         let dots = [];
 
         const wall = document.getElementById('wall');
         const currentDisplay = document.getElementById('current');
-        const canvas = document.getElementById('textCanvas');
-        const ctx = canvas.getContext('2d');
         const modal = document.getElementById('modal');
         const passwordInput = document.getElementById('passwordInput');
         const amountInput = document.getElementById('amountInput');
@@ -265,49 +257,67 @@
 
         // Get dot positions from text
         function getTextDotPositions() {
-            const width = 900;
-            const height = 300;
-            canvas.width = width;
-            canvas.height = height;
-
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, width, height);
-
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 120px Arial, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(TEXT, width / 2, height / 2);
-
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const pixels = imageData.data;
-
-            const textPixels = [];
-            const step = 2; // smaller step for more dots
-
-            for (let y = 0; y < height; y += step) {
-                for (let x = 0; x < width; x += step) {
-                    const i = (y * width + x) * 4;
-                    if (pixels[i] > 128) {
-                        textPixels.push({ x, y });
-                    }
-                }
-            }
-
-            // Use seeded random for consistent dot positions
-            const seededRandom = (seed) => {
-                const x = Math.sin(seed) * 10000;
-                return x - Math.floor(x);
+            const font = {
+                'R': ['###.','#..#','###.','#.#.','#..#'],
+                'O': ['.##.','#..#','#..#','#..#','.##.'],
+                'A': ['.##.','#..#','####','#..#','#..#'],
+                'D': ['###.','#..#','#..#','#..#','###.'],
+                'T': ['###','.#.','.#.','.#.','.#.'],
+                '$': ['.##','##.','.#.','.##','##.'],
+                '1': ['.#.','##.','.#.','.#.','###'],
+                'M': ['#...#','##.##','#.#.#','#...#','#...#'],
             };
 
+            const layout = [
+                { ch: 'R', col: 0 },
+                { ch: 'O', col: 5 },
+                { ch: 'A', col: 10 },
+                { ch: 'D', col: 15 },
+                { ch: 'T', col: 21 },
+                { ch: 'O', col: 25 },
+                { ch: '$', col: 31 },
+                { ch: '1', col: 35 },
+                { ch: 'M', col: 39 },
+            ];
+            const totalCols = 44;
+
+            const cells = [];
+            layout.forEach(({ ch, col }) => {
+                font[ch].forEach((row, ry) => {
+                    for (let cx = 0; cx < row.length; cx++) {
+                        if (row[cx] === '#') {
+                            cells.push({ col: col + cx, row: ry });
+                        }
+                    }
+                });
+            });
+
+            const totalCells = cells.length;
+            const base = Math.floor(TOTAL_DOTS / totalCells);
+            const remainder = TOTAL_DOTS - base * totalCells;
+
+            const cellSize = Math.min(Math.floor(900 / totalCols), 20);
+            const gridW = totalCols * cellSize;
+            const gridH = 5 * cellSize;
+            const offsetX = (900 - gridW) / 2;
+            const offsetY = (300 - gridH) / 2;
+
             const positions = [];
-            const shuffled = [...textPixels].sort((a, b) => seededRandom(a.x * 1000 + a.y) - 0.5);
+            cells.forEach((cell, ci) => {
+                const n = ci < remainder ? base + 1 : base;
+                const subCols = Math.ceil(Math.sqrt(n));
+                const subRows = Math.ceil(n / subCols);
 
-            for (let i = 0; i < Math.min(TOTAL_DOTS, shuffled.length); i++) {
-                positions.push(shuffled[i]);
-            }
+                for (let i = 0; i < n; i++) {
+                    const sx = i % subCols;
+                    const sy = Math.floor(i / subCols);
+                    positions.push({
+                        x: offsetX + cell.col * cellSize + (sx + 0.5) * (cellSize / subCols),
+                        y: offsetY + cell.row * cellSize + (sy + 0.5) * (cellSize / subRows),
+                    });
+                }
+            });
 
-            positions.sort((a, b) => a.x - b.x || a.y - b.y);
             return positions;
         }
 
@@ -315,14 +325,13 @@
             const positions = getTextDotPositions();
             dots = [];
 
-            // Use document fragment for better performance with 10k elements
             const fragment = document.createDocumentFragment();
 
-            positions.forEach((pos, i) => {
+            positions.forEach(pos => {
                 const dot = document.createElement('div');
                 dot.className = 'dot';
-                dot.style.left = `${pos.x - 2}px`;
-                dot.style.top = `${pos.y - 2}px`;
+                dot.style.left = `${(pos.x / 900) * 100}%`;
+                dot.style.top = `${(pos.y / 300) * 100}%`;
                 fragment.appendChild(dot);
                 dots.push(dot);
             });
