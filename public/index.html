@@ -221,7 +221,7 @@
         <div class="modal">
             <h3>Update Progress</h3>
             <input type="password" id="passwordInput" placeholder="Password">
-            <input type="number" id="amountInput" min="0" max="1000000" step="100" placeholder="New amount ($)">
+            <input type="number" id="amountInput" min="0" max="1000000" step="1" placeholder="New amount ($)">
             <div class="error" id="errorMsg">Invalid password</div>
             <div class="modal-buttons">
                 <button class="cancel-btn" onclick="closeModal()">Cancel</button>
@@ -233,7 +233,8 @@
     <script>
         const TOTAL_DOTS = 10000;
         const DOLLAR_PER_DOT = 100;
-        let filledCount = 0;
+        const MAX_AMOUNT = 1000000;
+        let currentAmount = 0;
         let dots = [];
 
         const wall = document.getElementById('wall');
@@ -248,7 +249,7 @@
             try {
                 const res = await fetch('/api/progress');
                 const data = await res.json();
-                filledCount = data.progress ?? 0;
+                currentAmount = data.progress ?? 0;
                 updateDisplay();
             } catch (e) {
                 console.error('Failed to fetch progress:', e);
@@ -340,11 +341,11 @@
         }
 
         function updateDisplay() {
-            const amount = filledCount * DOLLAR_PER_DOT;
-            currentDisplay.textContent = amount.toLocaleString();
+            currentDisplay.textContent = currentAmount.toLocaleString();
+            const filled = Math.min(Math.floor(currentAmount / DOLLAR_PER_DOT), TOTAL_DOTS);
 
             dots.forEach((dot, index) => {
-                if (index < filledCount) {
+                if (index < filled) {
                     dot.classList.add('filled');
                 } else {
                     dot.classList.remove('filled');
@@ -354,7 +355,7 @@
 
         function openEditModal() {
             modal.classList.add('active');
-            amountInput.value = filledCount * DOLLAR_PER_DOT;
+            amountInput.value = currentAmount;
             passwordInput.value = '';
             errorMsg.classList.remove('show');
             passwordInput.focus();
@@ -368,13 +369,11 @@
             const password = passwordInput.value;
             const amount = parseInt(amountInput.value, 10);
 
-            if (isNaN(amount) || amount < 0 || amount > 1000000) {
+            if (isNaN(amount) || amount < 0 || amount > MAX_AMOUNT) {
                 errorMsg.textContent = 'Invalid amount (0-1,000,000)';
                 errorMsg.classList.add('show');
                 return;
             }
-
-            const dotCount = Math.floor(amount / DOLLAR_PER_DOT);
 
             try {
                 const res = await fetch('/api/progress', {
@@ -383,7 +382,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${password}`
                     },
-                    body: JSON.stringify({ progress: dotCount })
+                    body: JSON.stringify({ progress: amount })
                 });
 
                 if (!res.ok) {
@@ -393,7 +392,7 @@
                     return;
                 }
 
-                filledCount = dotCount;
+                currentAmount = amount;
                 updateDisplay();
                 closeModal();
             } catch (e) {

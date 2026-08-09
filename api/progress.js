@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     const { progress } = req.body;
 
-    if (typeof progress !== 'number' || progress < 0 || progress > 10000) {
+    if (typeof progress !== 'number' || progress < 0 || progress > 1000000) {
       return res.status(400).json({ error: 'Invalid progress value' });
     }
 
